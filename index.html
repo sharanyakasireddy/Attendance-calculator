@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Attendance Calculator</title>
+  <style>
+    :root{--bg:#f3efe6;--card:#ffffff;--accent:#7c4d3a;--muted:#6b6b6b}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial;margin:0}
+    body{background:linear-gradient(180deg,#f7f3ef,var(--bg));min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px}
+    .frame{width:380px;max-width:96vw;background:var(--card);box-shadow:0 8px 30px rgba(20,20,20,0.08);border-radius:14px;overflow:hidden}
+    header{background:linear-gradient(90deg,var(--accent),#5b3b2e);color:#fff;padding:18px 20px}
+    header h1{font-size:18px}
+    .content{padding:16px}
+
+    /* Auth */
+    .card{padding:12px;border-radius:10px;background:linear-gradient(180deg,#fff,#fbfaf8)}
+    label{display:block;font-size:13px;color:var(--muted);margin-top:8px}
+    input[type=email],input[type=password],input[type=number]{width:100%;padding:10px;border-radius:8px;border:1px solid #e6e0d8;margin-top:6px}
+    button{background:var(--accent);color:#fff;border:0;padding:10px 12px;border-radius:9px;cursor:pointer;margin-top:12px}
+    .row{display:flex;gap:8px}
+    .secondary{background:#eee;color:#333}
+
+    /* Dashboard */
+    .stats{display:flex;gap:10px;margin-top:12px}
+    .stat{flex:1;padding:10px;background:#fff;border-radius:8px;text-align:center;box-shadow:0 2px 6px rgba(10,10,10,0.03)}
+    .stat h3{margin-bottom:6px;font-size:14px}
+    .percent{font-size:22px;font-weight:700;color:var(--accent)}
+
+    .history{max-height:220px;overflow:auto;margin-top:12px;padding-right:6px}
+    .entry{display:flex;justify-content:space-between;padding:10px;border-radius:8px;margin-bottom:8px;background:linear-gradient(180deg,#fff,#fcfbfa);align-items:center}
+    .date{font-weight:600}
+    .tiny{font-size:12px;color:var(--muted)}
+
+    .top-actions{display:flex;justify-content:space-between;align-items:center}
+    .linklike{background:transparent;border:0;color:#fff;text-decoration:underline;cursor:pointer}
+
+    footer{padding:10px 16px;background:#fbfaf8;border-top:1px solid #eee;text-align:center}
+
+    .error{color:#b00020;font-size:13px;margin-top:8px}
+    .muted{color:var(--muted);font-size:13px}
+
+    @media (max-width:420px){.frame{width:94vw}}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header>
+      <div class="top-actions">
+        <h1>Attendance Calculator</h1>
+        <button id="logoutBtn" class="linklike" style="display:none">Logout</button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- AUTH -->
+      <div id="auth" class="card">
+        <div id="auth-forms">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="you@example.com">
+
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="at least 6 characters">
+
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button id="loginBtn">Login</button>
+            <button id="signupBtn" class="secondary">Signup</button>
+          </div>
+
+          <p class="muted" style="margin-top:10px">Tip: Use different emails when testing multiple users.</p>
+          <p id="authError" class="error" style="display:none"></p>
+        </div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div id="dashboard" style="display:none">
+        <div class="card">
+          <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+            <div>
+              <div id="userEmail" class="tiny"></div>
+              <div class="muted" id="joinedAt"></div>
+            </div>
+            <div style="text-align:right">
+              <div class="muted">Current %</div>
+              <div class="percent" id="currentPercent">0%</div>
+            </div>
+          </div>
+
+          <hr style="margin:12px 0;border:none;border-top:1px solid #f0ece6">
+
+          <label>Classes Held Today</label>
+          <input id="heldInput" type="number" min="0" value="0">
+
+          <label>Classes Attended Today</label>
+          <input id="attendedInput" type="number" min="0" value="0">
+
+          <div class="row">
+            <button id="addBtn">Add / Update Today</button>
+            <button id="clearToday" class="secondary">Clear Today</button>
+          </div>
+
+          <div id="calcMessage" style="margin-top:10px" class="muted"></div>
+
+          <div class="stats">
+            <div class="stat">
+              <h3>Total Held</h3>
+              <div id="totalHeld">0</div>
+            </div>
+            <div class="stat">
+              <h3>Total Attended</h3>
+              <div id="totalAttended">0</div>
+            </div>
+          </div>
+
+        </div>
+
+        <h3 style="margin-top:12px">Attendance History</h3>
+        <div id="history" class="history"></div>
+      </div>
+    </div>
+
+    <footer>
+      <small class="muted">Prototype • Built with HTML / CSS / JS + Firebase</small>
+    </footer>
+  </div>
+
+  <script type="module">
+    // ====== IMPORTANT ======
+    // Replace the firebaseConfig object below with your project's config.
+    // To run this page locally you must serve it over HTTP (e.g. `python -m http.server 5000`)
+    // Firebase SDK used from CDN (module imports). Works when hosted or served locally via http.
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      createUserWithEmailAndPassword,
+      signInWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      setDoc,
+      getDoc,
+      updateDoc,
+      increment,
+      collection,
+      getDocs,
+      query,
+      orderBy,
+      deleteDoc
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBi7Qlna6p5aqgbGjdgINyt6dFQMz6XomQ",
+      authDomain: "attendance-tracker-c1647.firebaseapp.com",
+      projectId: "attendance-tracker-c1647",
+      storageBucket: "attendance-tracker-c1647.firebasestorage.app",
+      messagingSenderId: "402556528310",
+      appId: "1:402556528310:web:fd46290e88d90b70bf2817"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // UI elements
+    const authSection = document.getElementById('auth');
+    const dashboard = document.getElementById('dashboard');
+    const loginBtn = document.getElementById('loginBtn');
+    const signupBtn = document.getElementById('signupBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const authError = document.getElementById('authError');
+    const userEmail = document.getElementById('userEmail');
+    const joinedAt = document.getElementById('joinedAt');
+
+    const heldInput = document.getElementById('heldInput');
+    const attendedInput = document.getElementById('attendedInput');
+    const addBtn = document.getElementById('addBtn');
+    const clearToday = document.getElementById('clearToday');
+
+    const totalHeldEl = document.getElementById('totalHeld');
+    const totalAttendedEl = document.getElementById('totalAttended');
+    const currentPercentEl = document.getElementById('currentPercent');
+    const calcMessage = document.getElementById('calcMessage');
+    const historyEl = document.getElementById('history');
+
+    // Helper: today's date as YYYY-MM-DD
+    function todayKey() {
+      return new Date().toISOString().split('T')[0];
+    }
+
+    // Auth actions
+    signupBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      authError.style.display = 'none';
+      try {
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+        // create a totals doc for the user
+        const userDoc = doc(db, 'users', cred.user.uid);
+        await setDoc(userDoc, { totalHeld: 0, totalAttended: 0, createdAt: new Date().toISOString(), email });
+      } catch (err) {
+        authError.style.display = 'block';
+        authError.innerText = err.message;
+      }
+    });
+
+    loginBtn.addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      authError.style.display = 'none';
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        authError.style.display = 'block';
+        authError.innerText = err.message;
+      }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+      await signOut(auth);
+    });
+
+    // Watch auth state
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        authSection.style.display = 'none';
+        dashboard.style.display = 'block';
+        logoutBtn.style.display = 'inline-block';
+        userEmail.innerText = user.email;
+        // load totals & history
+        await loadUserData(user.uid);
+        await renderHistory(user.uid);
+      } else {
+        authSection.style.display = 'block';
+        dashboard.style.display = 'none';
+        logoutBtn.style.display = 'none';
+      }
+    });
+
+    // Add / Update today's attendance
+    addBtn.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user) return alert('Please login first');
+
+      let held = parseInt(heldInput.value) || 0;
+      let attended = parseInt(attendedInput.value) || 0;
+      if (held < 0 || attended < 0) return alert('Values cannot be negative');
+      if (attended > held) return alert('Attended cannot exceed held for the same input');
+
+      const key = todayKey();
+      const logRef = doc(db, 'users', user.uid, 'attendanceLogs', key);
+      const logSnap = await getDoc(logRef);
+
+      if (!logSnap.exists()) {
+        // create new day entry and increment totals
+        await setDoc(logRef, { held, attended, createdAt: new Date().toISOString() });
+        await updateDoc(doc(db, 'users', user.uid), { totalHeld: increment(held), totalAttended: increment(attended) });
+      } else {
+        // update existing day: append to the day's values
+        const data = logSnap.data();
+        const prevHeld = data.held || 0;
+        const prevAttended = data.attended || 0;
+        const newHeld = prevHeld + held;
+        const newAttended = prevAttended + attended;
+
+        await setDoc(logRef, { held: newHeld, attended: newAttended, createdAt: data.createdAt || new Date().toISOString() });
+        // only increment totals by the newly added amounts (held, attended)
+        await updateDoc(doc(db, 'users', user.uid), { totalHeld: increment(held), totalAttended: increment(attended) });
+      }
+
+      // refresh UI
+      heldInput.value = 0;
+      attendedInput.value = 0;
+      await loadUserData(user.uid);
+      await renderHistory(user.uid);
+    });
+
+    // Clear today's entry (optional convenience)
+    clearToday.addEventListener('click', async () => {
+      const user = auth.currentUser;
+      if (!user) return;
+      const key = todayKey();
+      const logRef = doc(db, 'users', user.uid, 'attendanceLogs', key);
+      const logSnap = await getDoc(logRef);
+      if (!logSnap.exists()) return alert('No entry for today to clear');
+      const data = logSnap.data();
+      // subtract from totals then delete entry
+      await updateDoc(doc(db, 'users', user.uid), { totalHeld: increment(-data.held), totalAttended: increment(-data.attended) });
+      await deleteDoc(logRef);
+      await loadUserData(user.uid);
+      await renderHistory(user.uid);
+    });
+
+    // Load totals and update UI
+    async function loadUserData(uid) {
+      const userDoc = doc(db, 'users', uid);
+      const snap = await getDoc(userDoc);
+      if (!snap.exists()) return;
+      const d = snap.data();
+      const totalHeld = d.totalHeld || 0;
+      const totalAttended = d.totalAttended || 0;
+      totalHeldEl.innerText = totalHeld;
+      totalAttendedEl.innerText = totalAttended;
+
+      if (totalHeld === 0) {
+        currentPercentEl.innerText = '0%';
+        calcMessage.innerText = 'Add your first entry to start calculating attendance.';
+        joinedAt.innerText = d.createdAt ? `Joined: ${new Date(d.createdAt).toLocaleDateString()}` : '';
+        return;
+      }
+
+      const percent = (totalAttended / totalHeld) * 100;
+      currentPercentEl.innerText = percent.toFixed(2) + '%';
+
+      if (percent < 75) {
+        // How many consecutive classes must user attend to reach 75%?
+        // Let x be additional classes attended (and held). New percent = (totalAttended + x)/(totalHeld + x) >= 0.75
+        // Solve: (A + x) >= 0.75*(H + x) -> A + x >= 0.75H + 0.75x -> x - 0.75x >= 0.75H - A -> 0.25x >= 0.75H - A
+        // x >= (0.75H - A) / 0.25
+        const needed = Math.ceil((0.75 * totalHeld - totalAttended) / 0.25);
+        calcMessage.innerText = `You need to attend the next ${needed} class(es) (consecutively) to reach 75%.`;
+      } else {
+        // How many classes can user bunk and still maintain >=75%?
+        // Let x be classes bunked (held increases by 0, attended doesn't). But typical interpretation: if more classes happen and user misses them, H+x increases, A stays same.
+        // We ask largest x such that A/(H + x) >= 0.75 -> A >= 0.75*(H+x) -> x <= (A/0.75) - H
+        const bunkable = Math.floor(totalAttended / 0.75 - totalHeld);
+        calcMessage.innerText = `You can miss ${bunkable} upcoming class(es) and remain at or above 75%.`;
+      }
+    }
+
+    // Render history list
+    async function renderHistory(uid) {
+      historyEl.innerHTML = '';
+      const logsCol = collection(db, 'users', uid, 'attendanceLogs');
+      // We'll fetch all and sort by date key descending
+      const snaps = await getDocs(logsCol);
+      const entries = [];
+      snaps.forEach(s => {
+        const id = s.id; // date key
+        const data = s.data();
+        entries.push({ id, ...data });
+      });
+      entries.sort((a,b) => b.id.localeCompare(a.id));
+
+      if (entries.length === 0) {
+        historyEl.innerHTML = '<div class="muted">No attendance logs yet. Add today\'s classes above.</div>';
+        return;
+      }
+
+      for (const e of entries) {
+        const perc = e.held ? Math.round((e.attended / e.held) * 100) : 0;
+        const entryEl = document.createElement('div');
+        entryEl.className = 'entry';
+
+        entryEl.innerHTML = `
+          <div>
+            <div class="date">${e.id}</div>
+            <div class="tiny">Held: ${e.held} • Attended: ${e.attended}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700">${perc}%</div>
+            <div class="tiny">${e.held ? '' : '—'}</div>
+          </div>
+        `;
+
+        historyEl.appendChild(entryEl);
+      }
+    }
+
+  </script>
+</body>
+</html>
